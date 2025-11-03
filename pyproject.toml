@@ -13,6 +13,7 @@ dev = [
 [project.scripts]
 pawalogs-db-inspector = "pawalogs.commands.db_schema_inspector:main"
 pawalogs-table-counts = "pawalogs.commands.table_counts:main"
+pawalogs-field-analyzer = "pawalogs.commands.field_analyzer:main"
 
 [build-system]
 requires = ["hatchling"]
