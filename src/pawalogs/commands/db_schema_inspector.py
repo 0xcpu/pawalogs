@@ -2,6 +2,7 @@
 Database Schema Inspector
 
 Reads a SQLite database file and extracts table names and schemas.
+Optionally filter to specific tables by providing table names as arguments.
 """
 
 import argparse
@@ -84,30 +85,47 @@ def main():
         description="Extract table names and schemas from a SQLite database",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
-Output files:
-  tables.json  - List of all table names
-  schemas.json - Complete schema for each table (columns, types, constraints,
-                 foreign keys, indexes)
+Output:
+  When -o/--output is specified:
+    Creates directory with tables.json and schemas.json files
+  When -o/--output is omitted:
+    Writes combined JSON to stdout
 
 Examples:
-  # Extract schema from database
-  pawalogs-db-inspector database.db output/
+  # Extract all tables to directory
+  pawalogs-db-inspector database.db -o output/
+
+  # Extract specific tables to directory
+  pawalogs-db-inspector database.db -o output/ table1 table2
+
+  # Output all tables to stdout
+  pawalogs-db-inspector database.db
+
+  # Output specific tables to stdout
+  pawalogs-db-inspector database.db table1 table2
 
   # Works with .EPSQL and .PLSQL files
-  pawalogs-db-inspector data/powerlog.PLSQL output/
+  pawalogs-db-inspector data/powerlog.PLSQL -o output/
         """,
     )
 
     parser.add_argument("db_path", help="Path to the SQLite database file")
     parser.add_argument(
-        "output_path",
-        help="Directory where output JSON files will be written",
+        "-o",
+        "--output",
+        help="Output directory path (if not specified, writes to stdout)",
+        default=None,
+    )
+    parser.add_argument(
+        "table_name",
+        help="Optional table name(s) to extract schema for (default: all tables)",
+        nargs="*",
+        default=None,
     )
 
     args = parser.parse_args()
 
     db_file = Path(args.db_path)
-    output_dir = Path(args.output_path)
 
     if not db_file.exists():
         print(f"Error: Database file not found: {args.db_path}", file=sys.stderr)
@@ -117,34 +135,49 @@ Examples:
         print(f"Error: Path is not a file: {args.db_path}", file=sys.stderr)
         sys.exit(1)
 
-    output_dir.mkdir(parents=True, exist_ok=True)
-
     try:
         conn = sqlite3.connect(db_file)
         cursor = conn.cursor()
 
-        print(f"Reading database: {db_file.name}")
-        table_names = get_table_names(cursor)
-        print(f"Found {len(table_names)} tables")
+        if args.output:
+            print(f"Reading database: {db_file.name}", file=sys.stderr)
 
-        tables_output = output_dir / "tables.json"
-        with open(tables_output, "w") as f:
-            json.dump({"tables": table_names}, f, indent=2)
-        print(f"Table names written to: {tables_output}")
+        if args.table_name:
+            table_names = args.table_name
+        else:
+            table_names = get_table_names(cursor)
+
+        if args.output:
+            print(f"Found {len(table_names)} tables", file=sys.stderr)
 
         schemas = {}
         for table_name in table_names:
-            print(f"  Extracting schema for: {table_name}")
+            if args.output:
+                print(f"  Extracting schema for: {table_name}", file=sys.stderr)
             schema = get_table_schema(cursor, table_name)
             schemas[table_name] = asdict(schema)
 
-        schemas_output = output_dir / "schemas.json"
-        with open(schemas_output, "w") as f:
-            json.dump(schemas, f, indent=2)
-        print(f"Table schemas written to: {schemas_output}")
-
         conn.close()
-        print("\nSchema extraction complete!")
+
+        if args.output:
+            output_dir = Path(args.output)
+            output_dir.mkdir(parents=True, exist_ok=True)
+
+            tables_output = output_dir / "tables.json"
+            with open(tables_output, "w") as f:
+                json.dump({"tables": table_names}, f, indent=2)
+            print(f"Table names written to: {tables_output}", file=sys.stderr)
+
+            schemas_output = output_dir / "schemas.json"
+            with open(schemas_output, "w") as f:
+                json.dump(schemas, f, indent=2)
+            print(f"Table schemas written to: {schemas_output}", file=sys.stderr)
+
+            print("\nSchema extraction complete!", file=sys.stderr)
+        else:
+            output = {"tables": table_names, "schemas": schemas}
+            json.dump(output, sys.stdout, indent=2)
+            print()
 
     except sqlite3.Error as e:
         print(f"Error reading database: {e}", file=sys.stderr)
