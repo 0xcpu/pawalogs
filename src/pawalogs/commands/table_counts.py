@@ -14,7 +14,10 @@ from pawalogs.utils import get_table_names, quote_identifier
 
 
 def get_table_counts(
-    cursor: sqlite3.Cursor, table_names: list[str], min_rows: int = 0
+    cursor: sqlite3.Cursor,
+    table_names: list[str],
+    min_rows: int = 0,
+    sort: str | None = None,
 ) -> dict[str, int]:
     """
     Get row counts for all tables.
@@ -23,6 +26,7 @@ def get_table_counts(
         cursor: Database cursor
         table_names: List of table names to count
         min_rows: Minimum number of rows to include in results (filter)
+        sort: Sort order for results ('asc' or 'desc')
 
     Returns:
         Dictionary mapping table names to row counts
@@ -36,6 +40,11 @@ def get_table_counts(
 
         if count >= min_rows:
             counts[table_name] = count
+
+    if sort == "asc":
+        counts = dict(sorted(counts.items(), key=lambda item: item[1]))
+    elif sort == "desc":
+        counts = dict(sorted(counts.items(), key=lambda item: item[1], reverse=True))
 
     return counts
 
@@ -74,6 +83,12 @@ Examples:
         default=0,
         help="Minimum number of rows to include table in output (default: 0)",
     )
+    parser.add_argument(
+        "--sort",
+        choices=["asc", "desc"],
+        default="desc",
+        help="Sort tables by row count (default: desc)",
+    )
 
     args = parser.parse_args()
 
@@ -93,7 +108,9 @@ Examples:
 
         table_names = get_table_names(cursor)
 
-        counts = get_table_counts(cursor, table_names, min_rows=args.min_rows)
+        counts = get_table_counts(
+            cursor, table_names, min_rows=args.min_rows, sort=args.sort
+        )
 
         output_data = {
             "database": db_file.name,
